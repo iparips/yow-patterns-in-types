@@ -2,6 +2,8 @@ package challenge1
 
 import core._, Syntax._
 
+import scala.util.{Success, Try}
+
 
 /*
  * Handling errors without exceptions....
@@ -12,10 +14,15 @@ import core._, Syntax._
  * A well-typed set of errors that can occur.
  */
 sealed trait Error
+
 case class Explosion(exception: Throwable) extends Error
+
 case object NotFound extends Error
+
 case object InvalidRequest extends Error
+
 case object InvalidMethod extends Error
+
 case object Unauthorized extends Error
 
 object Error {
@@ -27,6 +34,7 @@ object Error {
  * A result type that represents one of our errors or a success.
  */
 case class Fail[A](error: Error) extends Result[A]
+
 case class Ok[A](value: A) extends Result[A]
 
 sealed trait Result[A] {
@@ -44,9 +52,9 @@ sealed trait Result[A] {
    *  = 0
    */
   def fold[X](
-    fail: Error => X,
-    ok: A => X
-  ): X = {
+               fail: Error => X,
+               ok: A => X
+             ): X = {
     this match {
       case Fail(e) => fail(e)
       case Ok(v) => ok(v)
@@ -158,6 +166,7 @@ object Result {
 
   implicit def ResultMonad: Monad[Result] = new Monad[Result] {
     def point[A](a: => A) = ok(a)
+
     def bind[A, B](a: Result[A])(f: A => Result[B]) = a flatMap f
   }
 
@@ -185,9 +194,13 @@ object Example {
 
   /** Simplified method data type. */
   sealed trait Method
+
   case object Get extends Method
+
   case object Post extends Method
+
   case object Put extends Method
+
   case object Delete extends Method
 
   /*
@@ -196,11 +209,20 @@ object Example {
    * Hint: Scala defines String#toInt, but warning it throws exceptions if it is not a valid Int :|
    */
   def request(body: String): Result[Int] =
-    ???
+    Try(body.toInt) match {
+      case Success(v) => Result.ok(v)
+      case _ => Result.fail(InvalidRequest)
+    }
 
   /* Parse the method if it is valid, otherwise fail with InvalidMethod. */
   def method(method: String): Result[Method] =
-    ???
+    method match {
+      case "GET" => Result.ok(Get)
+      case "PUT" => Result.ok(Put)
+      case "POST" => Result.ok(Post)
+      case "DELETE" => Result.ok(Delete)
+      case _ => Result.fail(InvalidMethod)
+    }
 
   /*
    * Route method and path to an implementation.
@@ -215,7 +237,17 @@ object Example {
    *   *           -> NotFound
    */
   def route(method: Method, path: String): Result[Int => Int] =
-    ???
+    method match {
+      case Get =>
+        path match {
+          case "/single" => Result.ok((n: Int) => n * 1)
+          case "/double" => Result.ok((n: Int) => n * 2)
+          case "/triple" => Result.ok((n: Int) => n * 3)
+          case _ => Result.fail(NotFound)
+        }
+      case Put | Post | Delete => Result.fail(Unauthorized)
+      case _ => Result.fail(NotFound)
+    }
 
   /*
    * Attempt to compute an `answer`, by:
@@ -224,13 +256,24 @@ object Example {
    *  - determing request value
    *  - using the implementation and request value to compute an answer.
    */
-  def service(path: String, methodx: String, body: String): Result[Int] =
-    ???
+
+  def service(path: String, methodx: String, body: String): Result[Int] = {
+
+    for {
+      m <- method(methodx)
+      r <- route(m, path)
+      b <- request(body)
+    } yield r(b)
+
+  }
 
   /*
    * Sometimes we always an `answer`, so default to 0 if
    * our request failed in any way.
    */
   def run(path: String, method: String, body: String): Int =
-    ???
+    service(path, method, body) match {
+      case Ok(value) => value
+      case _ => 0
+    }
 }
